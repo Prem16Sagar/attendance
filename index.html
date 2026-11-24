@@ -1,0 +1,461 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Track your class attendance and see how many more hours you can miss while keeping 75%."><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Attendance Margin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one narrow column, a summary strip, then one card per subject with an hour-by-hour register bar. */
+:root{
+  --bg:#F4F6F9; --surface:#FFFFFF; --ink:#17202B; --muted:#5F6B7C; --line:#E1E5EB;
+  --accent:#1F5FBF; --accent-ink:#FFFFFF;
+  --ok:#1E8A5A; --ok-soft:#D7EFE3; --warn:#A86A12; --warn-soft:#F7EAD2; --bad:#C2413A; --bad-soft:#F7DEDC;
+  --empty:#E6EAF0;
+  --font-display:"Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body:"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1217; --surface:#161B22; --ink:#E6EAF0; --muted:#8C96A5; --line:#262D37;
+  --accent:#6E9DEB; --accent-ink:#0E1217;
+  --ok:#4CC38A; --ok-soft:#173528; --warn:#E2B254; --warn-soft:#3A2D14; --bad:#EE6B63; --bad-soft:#3E1C1A;
+  --empty:#242B35; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1217; --surface:#161B22; --ink:#E6EAF0; --muted:#8C96A5; --line:#262D37;
+  --accent:#6E9DEB; --accent-ink:#0E1217;
+  --ok:#4CC38A; --ok-soft:#173528; --warn:#E2B254; --warn-soft:#3A2D14; --bad:#EE6B63; --bad-soft:#3E1C1A;
+  --empty:#242B35; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:28px 56px}
+.wrap{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--font-display);font-weight:600;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:1.75rem}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.theme-btn{flex:none;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0}
+.theme-btn:hover{border-color:var(--muted)}
+.theme-btn svg{width:19px;height:19px}
+.theme-btn .i-sun{display:none}
+.is-dark .theme-btn .i-sun{display:block}
+.is-dark .theme-btn .i-moon{display:none}
+footer a{color:var(--accent)}
+header p{margin:4px 0 0;color:var(--muted);font-size:.9rem}
+.target{display:flex;align-items:center;gap:8px}
+.target input{width:4.2em;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);text-align:right}
+
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.summary > div{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.summary b{font-family:var(--font-display);font-size:1.35rem;font-weight:600}
+
+.banner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 14px;border:1px dashed var(--line);border-radius:10px;font-size:.88rem;color:var(--muted)}
+
+.list{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card.open{border-color:var(--muted)}
+.row{display:flex;align-items:center;gap:6px;padding-right:10px}
+.row:hover{background:var(--bg)}
+.row-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:12px 4px 12px 14px;border:0;background:transparent;text-align:left}
+.quick{flex:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:grid;place-items:center;padding:0}
+.quick svg{width:18px;height:18px}
+.quick.ok:hover,.quick.ok:active{border-color:var(--ok);color:var(--ok)}
+.quick.no:hover,.quick.no:active{border-color:var(--bad);color:var(--bad)}
+.row.flash-ok{background:var(--ok-soft)} .row.flash-no{background:var(--bad-soft)}
+@media (prefers-reduced-motion:no-preference){ .row{transition:background-color .6s} }
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom, 0px));z-index:20;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:10px;display:flex;gap:12px;align-items:center;width:max-content;max-width:calc(100% - 32px);font-size:.88rem;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast button{border:0;background:transparent;color:inherit;font-weight:600;text-decoration:underline;padding:4px 6px;flex:none}
+.row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.row-name{font-family:var(--font-display);font-weight:600;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-sub{font-size:.8rem;color:var(--muted)}
+.row-pct{font-family:var(--font-display);font-weight:600;font-size:1.05rem}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--muted)}
+.dot.safe{background:var(--ok)} .dot.tight{background:var(--warn)} .dot.short{background:var(--bad)}
+.chev{flex:none;width:16px;height:16px;color:var(--muted);transition:transform .15s}
+.card.open .chev{transform:rotate(180deg)}
+.detail{padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:14px}
+.card-top{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.name{flex:1;min-width:0;font-size:.9rem;border:1px solid var(--line);border-radius:7px;background:var(--surface);padding:5px 8px}
+.chip{font-size:.75rem;padding:3px 8px;border-radius:999px;background:var(--empty);color:var(--muted);white-space:nowrap}
+.remove{border:0;background:transparent;color:var(--muted);font-size:.8rem;padding:4px 6px;border-radius:6px;white-space:nowrap}
+.remove:hover{color:var(--bad)}
+.remove.confirm{color:var(--bad);background:var(--bad-soft)}
+
+.stat{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.pct{font-family:var(--font-display);font-size:2.2rem;font-weight:600;line-height:1}
+.pill{font-size:.75rem;font-weight:600;padding:3px 9px;border-radius:999px}
+.pill.safe{background:var(--ok-soft);color:var(--ok)}
+.pill.tight{background:var(--warn-soft);color:var(--warn)}
+.pill.short{background:var(--bad-soft);color:var(--bad)}
+.pill.new{background:var(--empty);color:var(--muted)}
+.frac{color:var(--muted);font-size:.9rem}
+.msg{margin:0;font-weight:500}
+.sub{margin:-6px 0 0;color:var(--muted);font-size:.88rem}
+
+.register{display:grid;gap:3px}
+.register span{height:16px;border-radius:3px;background:var(--empty)}
+.register .a{background:var(--accent)}
+.register .m{background:var(--bad)}
+.register .s{background:repeating-linear-gradient(135deg,var(--ok-soft) 0 3px,var(--surface) 3px 6px);box-shadow:inset 0 0 0 1px var(--ok)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.75rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;background:var(--empty)}
+.legend .a{background:var(--accent)} .legend .m{background:var(--bad)}
+.legend .s{background:repeating-linear-gradient(135deg,var(--ok-soft) 0 2px,var(--surface) 2px 4px);box-shadow:inset 0 0 0 1px var(--ok)}
+
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:9px;font-size:.88rem;font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.absent:hover{border-color:var(--bad);color:var(--bad)}
+.btn:disabled{opacity:.4;cursor:default}
+.counts{display:flex;gap:10px;align-items:center;font-size:.85rem;color:var(--muted)}
+.counts label{display:flex;align-items:center;gap:6px}
+.counts input{width:3.6em;padding:5px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);text-align:right}
+
+.add{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.add input[type=text]{flex:1 1 200px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg label{padding:7px 11px;font-size:.85rem;cursor:pointer;color:var(--muted)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg input:checked + span{color:var(--ink);font-weight:600}
+.seg label:has(input:checked){background:var(--empty)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+
+footer{font-size:.8rem;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+@media (max-width:520px){
+  .chev{display:none}
+  .row-name{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25}
+  .row-sub .cr{display:none}
+  .row-toggle{gap:9px;padding-left:12px}
+  .quick{width:36px;height:36px}
+}
+@media (max-width:440px){ .pct{font-size:1.9rem} .summary b{font-size:1.15rem} }
+@media (prefers-reduced-motion:no-preference){ .register span{transition:background-color .2s} }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Attendance Margin</h1>
+      <p>Mark each class hour. See how many more you can miss and still keep 75%.</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Switch to dark mode" title="Switch theme">
+      <svg class="i-moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.5A7 7 0 0 1 7.5 3.5a7 7 0 1 0 9 9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+      <svg class="i-sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 1.8v2.2M10 16v2.2M1.8 10H4M16 10h2.2M4.2 4.2l1.6 1.6M14.2 14.2l1.6 1.6M4.2 15.8l1.6-1.6M14.2 5.8l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <div class="summary" id="summary"></div>
+  <div class="banner" id="banner" hidden>
+    <span>These are example subjects. Edit them, or clear them and add your own.</span>
+    <button class="btn" id="clearExamples" type="button">Clear examples</button>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <form class="add" id="addForm" autocomplete="off">
+    <input type="text" id="newName" placeholder="Subject name, e.g. Operating Systems" maxlength="60" required aria-label="Subject name">
+    <div class="seg" role="radiogroup" aria-label="Credits">
+      <label><input type="radio" name="credits" id="cr2" value="2"><span>2 credit · 22 h</span></label>
+      <label><input type="radio" name="credits" id="cr3" value="3" checked><span>3 credit · 33 h</span></label>
+    </div>
+    <button class="btn primary" type="submit">Add subject</button>
+  </form>
+
+  <div class="toast" id="toast" hidden role="status"><span id="toastMsg"></span><button type="button" id="toastUndo">Undo</button></div>
+
+  <footer>
+    <span id="syncNote">Saved on this device.</span>
+    <span>One class = one hour. A 2-credit course runs 22 hours, a 3-credit course 33 hours. Leave left is counted against the whole course, so it never drops when you attend.</span>
+    <span>© <span id="year">2026</span> Prem Sagar · <a id="repoLink" href="https://github.com/Prem16Sagar/attendance" target="_blank" rel="noopener">Source on GitHub</a></span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  const KEY = "attendance-margin-v1";
+  const HOURS = {2:22, 3:33};
+  const EPS = 1e-9;
+  const examples = () => ({ target:75, example:true, subjects:[
+    {id:"ex1", name:"Data Structures", credits:3, attended:18, conducted:21},
+    {id:"ex2", name:"Discrete Mathematics", credits:3, attended:12, conducted:17},
+    {id:"ex3", name:"Environmental Studies", credits:2, attended:10, conducted:12}
+  ]});
+
+  let state = null;
+  try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch(e) {}
+  if (!state || !Array.isArray(state.subjects)) state = examples();
+
+  const undo = {}; // id -> stack of previous {attended, conducted}
+  let openId = null; // the one subject shown expanded
+  let dbRef = null, dbOK = false, dbTimer = null, writing = false, pending = false;
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+  const uid = () => Math.random().toString(36).slice(2, 10);
+
+  function calc(s, targetPct){
+    const t = targetPct / 100, T = HOURS[s.credits] || 33;
+    const p = s.attended, c = s.conducted, missed = c - p;
+    const remaining = Math.max(T - c, 0);
+    const allowed = Math.floor(T * (1 - t) + EPS);
+    const leavesLeft = allowed - missed;
+    const pct = c ? p / c * 100 : null;
+    const best = T ? Math.min((p + remaining) / Math.max(T, c), 1) * 100 : 0;
+    let skipNow = 0, needNow = 0;
+    if (c && p / c >= t - EPS) skipNow = t > 0 ? Math.floor(p / t - c + EPS) : Infinity;
+    else if (c) needNow = t < 1 ? Math.ceil((t * c - p) / (1 - t) - EPS) : Infinity;
+    let status = "new";
+    if (c) status = (leavesLeft < 0 || pct < targetPct - EPS) ? "short" : (leavesLeft <= 1 ? "tight" : "safe");
+    return {T, p, c, missed, remaining, allowed, leavesLeft, pct, best, skipNow, needNow, status};
+  }
+
+  const fmt = v => v === null ? "—" : (Math.round(v * 10) / 10) + "%";
+  const STATUS = {safe:"On track", tight:"Tight", short:"Short", new:"Not started"};
+
+  function render(){
+    const tgt = state.target = 75;
+    $("banner").hidden = !state.example;
+
+    // summary
+    let P = 0, C = 0, risk = 0;
+    state.subjects.forEach(s => { P += s.attended; C += s.conducted; const r = calc(s, tgt); if (r.status === "short" || r.status === "tight") risk++; });
+    $("summary").innerHTML =
+      `<div><span class="label">Overall</span><b class="num">${fmt(C ? P / C * 100 : null)}</b></div>` +
+      `<div><span class="label">Hours attended</span><b class="num">${P} / ${C}</b></div>` +
+      `<div><span class="label">Need attention</span><b class="num">${risk} of ${state.subjects.length}</b></div>`;
+
+    // cards
+    const list = $("list");
+    if (!state.subjects.length){
+      list.innerHTML = `<div class="banner"><span>No subjects yet. Add your first one below.</span></div>`;
+      return;
+    }
+    list.innerHTML = state.subjects.map(s => {
+      const r = calc(s, tgt);
+      let msg, sub = "";
+      if (!r.c) msg = `No classes yet. You can miss up to ${plural(r.allowed, "hour")} of ${r.T}.`;
+      else if (r.remaining === 0) msg = `Course complete. Final attendance ${fmt(r.pct)}.`;
+      else if (r.leavesLeft > 0) msg = `You can miss ${plural(Math.min(r.leavesLeft, r.remaining), "more hour")} this course.`;
+      else if (r.leavesLeft === 0) msg = `No leave left. Attend every one of the ${plural(r.remaining, "remaining hour")}.`;
+      else msg = `Even attending all ${plural(r.remaining, "remaining hour")}, you would finish at ${fmt(r.best)}.`;
+      if (r.c && r.remaining > 0){
+        if (r.pct >= tgt - EPS) sub = r.skipNow > 0 ? `Right now you could skip ${r.skipNow} in a row and stay at ${tgt}%.` : `You are right at ${tgt}%. Missing the next hour puts you below it.`;
+        else sub = r.needNow <= r.remaining ? `Attend the next ${plural(r.needNow, "hour")} in a row to get back to ${tgt}%.` : `Not enough hours left to get back to ${tgt}% before the course ends.`;
+      }
+      // register bar: attended, missed, then remaining (last leavesLeft of them hatched as safe to miss)
+      const cells = [], total = Math.max(r.T, r.c);
+      const safe = Math.max(0, Math.min(r.leavesLeft, r.remaining));
+      for (let i = 0; i < total; i++){
+        let cls = "";
+        if (i < r.p) cls = "a"; else if (i < r.c) cls = "m"; else if (i >= total - safe) cls = "s";
+        cells.push(`<span class="${cls}"></span>`);
+      }
+      const canUndo = (undo[s.id] || []).length > 0;
+      let brief;
+      if (!r.c) brief = `can miss up to ${r.allowed}`;
+      else if (r.remaining === 0) brief = "course complete";
+      else if (r.leavesLeft > 0) brief = `can miss ${Math.min(r.leavesLeft, r.remaining)} more`;
+      else if (r.leavesLeft === 0) brief = "no leave left";
+      else brief = `can't reach ${tgt}%`;
+      const isOpen = openId === s.id;
+      const row = `<div class="row">
+          <button class="row-toggle" type="button" data-act="toggle" aria-expanded="${isOpen}">
+            <span class="dot ${r.status}" aria-hidden="true"></span>
+            <span class="row-main"><span class="row-name">${esc(s.name)}</span><span class="row-sub"><span class="cr">${s.credits} credit · </span>${brief}</span></span>
+            <span class="row-pct num">${fmt(r.pct)}</span>
+            <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="quick ok" type="button" data-act="present" data-quick="1" aria-label="Mark present in ${esc(s.name)}" title="Present"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="quick no" type="button" data-act="absent" data-quick="1" aria-label="Mark absent in ${esc(s.name)}" title="Absent"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>`;
+      if (!isOpen) return `<article class="card" data-id="${esc(s.id)}">${row}</article>`;
+      return `<article class="card open" data-id="${esc(s.id)}">${row}<div class="detail">
+        <div class="stat">
+          <span class="pill ${r.status}">${STATUS[r.status]}</span>
+          <span class="frac num">${r.p} of ${r.c} attended · ${r.missed} missed · ${r.remaining} left</span>
+        </div>
+        <p class="msg">${msg}</p>
+        ${sub ? `<p class="sub">${sub}</p>` : ""}
+        <div class="register" style="grid-template-columns:repeat(${total},minmax(0,1fr))" role="img" aria-label="${r.p} attended, ${r.missed} missed, ${r.remaining} remaining of ${r.T} hours">${cells.join("")}</div>
+        <div class="legend"><span><i class="a"></i>Attended</span><span><i class="m"></i>Missed</span><span><i class="s"></i>Can still miss</span><span><i></i>Must attend</span></div>
+        <div class="controls">
+          <div class="btns">
+            <button class="btn primary" type="button" data-act="present">+1 Present</button>
+            <button class="btn absent" type="button" data-act="absent">+1 Absent</button>
+            <button class="btn" type="button" data-act="undo" ${canUndo ? "" : "disabled"}>Undo</button>
+          </div>
+          <div class="counts">
+            <label>Attended <input type="number" min="0" class="num" id="att-${esc(s.id)}" data-field="attended" value="${r.p}"></label>
+            <label>Held <input type="number" min="0" class="num" id="con-${esc(s.id)}" data-field="conducted" value="${r.c}"></label>
+          </div>
+        </div>
+        <div class="card-top">
+          <input class="name" id="name-${esc(s.id)}" value="${esc(s.name)}" maxlength="60" aria-label="Rename subject">
+          <span class="chip">${s.credits} credit · ${r.T} h</span>
+          <button class="remove" type="button" data-act="remove">Remove</button>
+        </div>
+      </div></article>`;
+    }).join("");
+  }
+
+  function adopt(){ if (state.example) state.example = false; }
+
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {}
+    if (dbRef && dbOK && !state.example){
+      clearTimeout(dbTimer);
+      dbTimer = setTimeout(pushRemote, 700);
+    }
+  }
+  async function pushRemote(){
+    if (writing){ pending = true; return; }
+    writing = true;
+    try { await dbRef.set(JSON.parse(JSON.stringify(state))); setSync(true); }
+    catch(e){ dbOK = false; setSync(false); }
+    writing = false;
+    if (pending){ pending = false; pushRemote(); }
+  }
+  function setSync(acct){
+    $("syncNote").textContent = acct ? "Saved to your account. Opens with your data on any device." : "Saved on this device.";
+  }
+
+  const find = id => state.subjects.find(s => s.id === id);
+  function pushUndo(s){ (undo[s.id] = undo[s.id] || []).push({attended:s.attended, conducted:s.conducted}); if (undo[s.id].length > 50) undo[s.id].shift(); }
+
+  $("list").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-act]"); if (!btn) return;
+    const card = btn.closest(".card"); const s = find(card.dataset.id); if (!s) return;
+    const act = btn.dataset.act;
+    if (act === "toggle"){
+      openId = openId === s.id ? null : s.id;
+      render();
+      const el = document.querySelector('.card.open');
+      if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({block:"start"});
+      return;
+    }
+    if (act === "remove"){
+      if (!btn.classList.contains("confirm")){
+        btn.classList.add("confirm"); btn.textContent = "Tap again to remove";
+        setTimeout(() => { if (btn.isConnected){ btn.classList.remove("confirm"); btn.textContent = "Remove"; } }, 3000);
+        return;
+      }
+      state.subjects = state.subjects.filter(x => x !== s); adopt();
+    } else if (act === "present"){ pushUndo(s); s.attended++; s.conducted++; adopt(); }
+    else if (act === "absent"){ pushUndo(s); s.conducted++; adopt(); }
+    else if (act === "undo"){ const prev = (undo[s.id] || []).pop(); if (prev){ s.attended = prev.attended; s.conducted = prev.conducted; } }
+    save(); render();
+    if (btn.dataset.quick) quickFeedback(s, act);
+  });
+
+  let toastTimer = null, toastSubject = null;
+  function quickFeedback(s, act){
+    const card = document.querySelector(`.card[data-id="${CSS.escape(s.id)}"] .row`);
+    if (card){
+      card.classList.add(act === "present" ? "flash-ok" : "flash-no");
+      setTimeout(() => card.classList.remove("flash-ok", "flash-no"), 700);
+    }
+    toastSubject = s.id;
+    $("toastMsg").textContent = (act === "present" ? "Present" : "Absent") + " · " + s.name;
+    $("toast").hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4000);
+  }
+  $("toastUndo").addEventListener("click", () => {
+    const s = find(toastSubject);
+    const prev = s && (undo[s.id] || []).pop();
+    if (prev){ s.attended = prev.attended; s.conducted = prev.conducted; save(); render(); }
+    $("toast").hidden = true; clearTimeout(toastTimer);
+  });
+
+  $("list").addEventListener("input", e => {
+    if (!e.target.classList.contains("name")) return;
+    const s = find(e.target.closest(".card").dataset.id); if (!s) return;
+    s.name = e.target.value.slice(0, 60); adopt(); save();
+    const rn = e.target.closest(".card").querySelector(".row-name"); if (rn) rn.textContent = s.name;
+    $("banner").hidden = !state.example;
+  });
+
+  $("list").addEventListener("change", e => {
+    const f = e.target.dataset.field; if (!f) return;
+    const s = find(e.target.closest(".card").dataset.id); if (!s) return;
+    pushUndo(s);
+    let v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+    s[f] = v;
+    if (f === "attended" && s.attended > s.conducted) s.conducted = s.attended;
+    if (f === "conducted" && s.attended > s.conducted) s.attended = s.conducted;
+    adopt(); save(); render();
+  });
+
+  $("clearExamples").addEventListener("click", () => {
+    state = {target: state.target, example:false, subjects:[]};
+    save(); render(); $("newName").focus();
+  });
+
+  $("addForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const name = $("newName").value.trim(); if (!name) return;
+    const credits = $("cr2").checked ? 2 : 3;
+    if (state.example) state = {target: state.target, example:false, subjects:[]};
+    const nid = uid();
+    state.subjects.push({id:nid, name, credits, attended:0, conducted:0});
+    openId = nid;
+    $("newName").value = "";
+    save(); render();
+  });
+
+  render();
+
+  // Light / dark toggle. Remembers the choice on this device; otherwise follows the phone's setting.
+  const THEME_KEY = "attendance-margin-theme";
+  const root = document.documentElement;
+  const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function currentDark(){
+    const t = root.getAttribute("data-theme");
+    return t ? t === "dark" : !!(mq && mq.matches);
+  }
+  function syncThemeBtn(){
+    const dark = currentDark();
+    document.body.classList.toggle("is-dark", dark);
+    $("themeBtn").setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+  }
+  try { const saved = localStorage.getItem(THEME_KEY); if (saved === "dark" || saved === "light") root.setAttribute("data-theme", saved); } catch(e) {}
+  syncThemeBtn();
+  if (mq && mq.addEventListener) mq.addEventListener("change", syncThemeBtn);
+  new MutationObserver(syncThemeBtn).observe(root, {attributes:true, attributeFilter:["data-theme"]});
+  $("themeBtn").addEventListener("click", () => {
+    const next = currentDark() ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem(THEME_KEY, next); } catch(e) {}
+  });
+  $("year").textContent = new Date().getFullYear();
+
+  // Account sync when the viewer can keep private data; otherwise this device only.
+  (async () => {
+    try {
+      if (!window.claude || !window.claude.use) return;
+      const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+      if (!db || !user) return;
+      const id = await user.id(); if (!id) return;
+      dbRef = db.doc("data/users/" + id + "/tracker");
+      const snap = await Promise.race([dbRef.get(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000))]);
+      dbOK = true;
+      const d = snap.exists ? snap.data() : null;
+      if (d && Array.isArray(d.subjects)){
+        state = JSON.parse(JSON.stringify(d));
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {}
+        render(); setSync(true);
+      } else if (!state.example){
+        await pushRemote();
+      }
+    } catch(e) { dbOK = false; }
+  })();
+})();
+</script>
+</body></html>
